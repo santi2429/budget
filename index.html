@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Budget">
+<meta name="theme-color" content="#120F18">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Budget</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:radial-gradient(120% 60% at 100% 0%,#2A1D3A 0%,#120F18 60%) fixed,#120F18;color:#F4EFE8;min-height:100vh}
+button,input,select{font:inherit}
+.app{max-width:430px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 24px) 20px calc(env(safe-area-inset-bottom) + 96px);display:flex;flex-direction:column;gap:16px}
+h1{margin:0;font-size:28px;font-weight:700}
+.muted{color:#B9AFC4;font-size:13px}
+.card{background:#1C1826;border:1px solid #2A2338;border-radius:20px;padding:14px}
+.grad{background:linear-gradient(160deg,#3A2A4F,#241C33);border:1px solid #3F3152;border-radius:20px;padding:14px}
+.grid2{display:flex;gap:12px}.grid2>div{flex:1}
+.big{font-size:22px;font-weight:700}
+.bar{height:10px;background:#2A2338;border-radius:999px;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#8FE3B0,#5FD6C8)}
+.pills{display:flex;flex-wrap:wrap;gap:8px}
+.pill{border-radius:999px;padding:6px 12px;font-size:13px}
+.row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #2A2338}
+.row:last-child{border-bottom:none}
+.dot{width:12px;height:12px;border-radius:50%;flex:none}
+.grow{flex:1;min-width:0}
+.t{font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.amt{font-size:16px;font-weight:700;white-space:nowrap}
+.sel{margin-top:4px;background:#120F18;color:#B9AFC4;border:1px solid #3A3248;border-radius:10px;padding:4px 6px;font-size:12px}
+.x{background:none;border:none;color:#B9AFC4;font-size:22px;line-height:1;padding:4px 6px;cursor:pointer}
+.form{display:flex;gap:8px}
+.form input{flex:1;min-height:52px;border-radius:16px;border:1px solid #3A3248;padding:0 16px;font-size:16px;background:#1C1826;color:#F4EFE8;outline:none;min-width:0}
+.form button{min-height:52px;border:none;border-radius:16px;background:linear-gradient(135deg,#FF9F5A,#FF6B8B);color:#120F18;font-weight:700;padding:0 18px;cursor:pointer}
+.msg{font-size:13px;color:#8FE3B0;min-height:16px}
+.warn{background:rgba(255,107,139,.12);border:1px solid rgba(255,107,139,.45);border-radius:16px;padding:12px 14px;font-size:14px}
+nav{position:fixed;left:0;right:0;bottom:0;background:#17131F;border-top:1px solid #2A2338;display:flex;justify-content:space-around;padding:10px 0 calc(env(safe-area-inset-bottom) + 10px)}
+nav button{background:none;border:none;color:#B9AFC4;font-size:14px;padding:6px 14px;cursor:pointer}
+nav button.on{color:#F4EFE8;font-weight:700}
+h2{margin:0;font-size:15px;font-weight:600}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<nav id="nav"></nav>
+<script>
+const CATS = {
+  "Comida":{c:"#FF9F5A",w:["almuerzo","almuerzos","desayuno","cena","comida","restaurante","mercado","tienda","supermercado","cafe","cafeteria","arepa","arepas","pizza","hamburguesa","perro","sandwich","empanada","empanadas","sopa","pollo","carne","verdura","verduras","fruta","frutas","leche","huevos","pan","panaderia","jugo","gaseosa","bebidas","galletas","jumbo","exito","ara","d1","carulla","ks","olla","rapidito"]},
+  "Transporte":{c:"#6CB6FF",w:["uber","taxi","bus","buseta","metro","transmilenio","metroplus","tren","gasolina","acpm","parqueadero","parqueo","pasaje","tiquete","tiquetes","didi","cabify","indriver","moto","peaje","avion","vuelo","bici","bicicleta"]},
+  "Servicios":{c:"#5FD6C8",w:["internet","luz","energia","agua","gas","acueducto","celular","recarga","plan","netflix","spotify","disney","hbo","youtube","suscripcion","icloud","chatgpt","claude","dropbox","lavanderia","aseo"]},
+  "Fijos":{c:"#B59CFF",w:["arriendo","alquiler","cuota","credito","seguro","matricula","pension","administracion","prepagada","colegio","universidad","predial","impuesto","eps"]},
+  "Cuidado personal":{c:"#F5C542",w:["peluqueria","peluquero","corte","barberia","manicure","pedicure","unas","gimnasio","gym","crema","shampoo","jabon","desodorante","dentista","odontologo","medicina","medicamento","medicamentos","medico","cita","drogueria","farmacia","maquillaje","perfume","cosmeticos","vitaminas","spa","depilacion"]},
+  "Innecesario":{c:"#FF6B8B",w:["domicilio","domicilios","rappi","ifood","antojo","antojos","juego","juegos","cine","licor","trago","cerveza","bar","discoteca","helado","dulces","chocolates","snacks","papas"]},
+  "Otros":{c:"#B9AFC4",w:[]}
+};
+const KW = {};
+for (const [cat, info] of Object.entries(CATS)) for (const k of info.w) KW[k] = cat;
+
+const KEY = "gastos_v1";
+let st = load();
+let view = "inicio";
+let msg = "";
+
+function load(){
+  try { const d = JSON.parse(localStorage.getItem(KEY)); if (d && d.expenses) return d; } catch(e){}
+  return {expenses:[], incomes:[], learned:{}};
+}
+function save(){
+  try { localStorage.setItem(KEY, JSON.stringify(st)); }
+  catch(e){ msg = "No pude guardar en este navegador."; }
+}
+
+const fmt = n => "$" + Math.round(n).toLocaleString("es-CO");
+const today = () => new Date().toLocaleDateString("sv-SE");
+const thisMonth = () => today().slice(0,7);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const norm = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+const words = s => norm(s).split(/[^a-z0-9ñ]+/).filter(Boolean);
+const sum = arr => arr.reduce((a,b)=>a+b.amount,0);
+const monthExp = () => st.expenses.filter(e => e.date.startsWith(thisMonth()));
+const monthInc = () => st.incomes.filter(e => e.date.startsWith(thisMonth()));
+
+function classify(desc){
+  const ws = words(desc);
+  for (const w of ws) if (st.learned[w]) return st.learned[w];
+  for (const w of ws) if (KW[w]) return KW[w];
+  return "Otros";
+}
+function learn(desc, cat){
+  for (const w of words(desc)) st.learned[w] = cat;
+}
+function parse(text){
+  const m = text.match(/\d[\d.,]*/);
+  if (!m) return null;
+  const amount = parseInt(m[0].replace(/[.,]/g,""), 10);
+  if (!amount) return null;
+  const desc = text.replace(m[0]," ").replace(/\s+/g," ").trim() || "Gasto";
+  return {amount, desc};
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function addExpense(text){
+  const p = parse(text);
+  if (!p){ msg = "Escribe el monto, por ejemplo: 15000 almuerzo"; return render(); }
+  const cat = classify(p.desc);
+  st.expenses.push({id:uid(), amount:p.amount, desc:p.desc, cat, date:today()});
+  save(); msg = cat === "Otros" ? "No reconocí el gasto: elige su categoría en la lista" : "Guardado en " + cat; render();
+}
+function addIncome(text){
+  const p = parse(text);
+  if (!p){ msg = "Escribe el monto, por ejemplo: 800000 mesada"; return render(); }
+  st.incomes.push({id:uid(), amount:p.amount, desc:p.desc, date:today()});
+  save(); msg = "Ingreso guardado"; render();
+}
+
+function nav(){
+  const items = [["inicio","Inicio"],["ingresos","Ingresos"],["informe","Informe"]];
+  return items.map(([v,l]) => `<button data-act="nav" data-view="${v}" class="${view===v?"on":""}">${l}</button>`).join("");
+}
+
+function catPills(list){
+  return Object.keys(CATS).map(c => {
+    const total = sum(list.filter(e => e.cat === c));
+    const col = CATS[c].c;
+    return `<span class="pill" style="background:${col}22;color:${col};border:1px solid ${col}66">${esc(c)} ${fmt(total)}</span>`;
+  }).join("");
+}
+
+function vInicio(){
+  const mes = monthExp();
+  const spent = sum(mes);
+  const inc = sum(monthInc());
+  const left = inc - spent;
+  const pct = inc ? Math.min(100, spent/inc*100) : 0;
+  let status, col;
+  if (!inc){ status = "Agrega tus ingresos para ver cuánto te queda."; col = "#B9AFC4"; }
+  else if (spent > inc){ status = "Estás gastando más de lo que ingresas."; col = "#FF9AB2"; }
+  else if (pct >= 90){ status = `Llevas el ${Math.round(pct)} % de tus ingresos.`; col = "#FFD966"; }
+  else { status = "Vas por debajo de tus ingresos."; col = "#8FE3B0"; }
+  const hoy = st.expenses.filter(e => e.date === today()).slice().reverse();
+  const hour = new Date().getHours();
+  const saludo = hour < 12 ? "Buenos días" : hour < 18 ? "Buenas tardes" : "Buenas noches";
+  const fecha = new Date().toLocaleDateString("es-CO",{weekday:"long",day:"numeric",month:"long"});
+
+  return `
+  <div>
+    <div class="muted">${esc(fecha)}</div>
+    <h1>¡${saludo}! Así va tu día</h1>
+  </div>
+  <div class="grid2">
+    <div class="grad"><div class="muted">Gastos del mes</div><div class="big">${fmt(spent)}</div></div>
+    <div class="grad" style="background:linear-gradient(160deg,#1F3A33,#17271F);border-color:#2B5246"><div class="muted">Te queda</div><div class="big" style="color:${left<0?"#FF9AB2":"#8FE3B0"}">${fmt(left)}</div></div>
+  </div>
+  <div class="card" style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;justify-content:space-between" class="muted"><span>Ingresos ${fmt(inc)}</span><span>Gastado ${Math.round(pct)} %</span></div>
+    <div class="bar"><i style="width:${pct}%"></i></div>
+    <div style="font-size:13px;color:${col}">${status}</div>
+  </div>
+  ${spent > inc && inc ? `<div class="warn">Ojo: ya gastaste más de lo que ingresaste este mes.</div>` : ""}
+  <div class="pills">${catPills(mes)}</div>
+  <div class="card">
+    <h2 style="margin-bottom:4px">Gastos de hoy</h2>
+    ${hoy.length ? hoy.map(rowExp).join("") : `<div class="muted" style="padding:12px 0">Aún no registras gastos hoy.</div>`}
+  </div>
+  <div class="form">
+    <input id="expIn" type="text" placeholder="Ej: 15000 almuerzo" autocomplete="off">
+    <button data-act="addExp">Guardar</button>
+  </div>
+  <div class="msg">${esc(msg)}</div>`;
+}
+
+function rowExp(e){
+  const col = CATS[e.cat] ? CATS[e.cat].c : "#B9AFC4";
+  const opts = Object.keys(CATS).map(c => `<option ${c===e.cat?"selected":""}>${esc(c)}</option>`).join("");
+  return `<div class="row">
+    <span class="dot" style="background:${col};box-shadow:0 0 10px ${col}99"></span>
+    <div class="grow">
+      <div class="t">${esc(e.desc)}</div>
+      <select class="sel" data-act="cat" data-id="${e.id}">${opts}</select>
+    </div>
+    <span class="amt">${fmt(e.amount)}</span>
+    <button class="x" data-act="delExp" data-id="${e.id}" aria-label="Borrar">×</button>
+  </div>`;
+}
+
+function vIngresos(){
+  const list = monthInc().slice().reverse();
+  const total = sum(list);
+  return `
+  <div>
+    <div class="muted">Mes actual</div>
+    <h1>Mis ingresos</h1>
+  </div>
+  <div class="grad" style="background:linear-gradient(160deg,#1F3A33,#17271F);border-color:#2B5246">
+    <div class="muted">Ingresos del mes</div>
+    <div class="big" style="font-size:30px;color:#8FE3B0">${fmt(total)}</div>
+  </div>
+  <div class="form">
+    <input id="incIn" type="text" placeholder="Ej: 800000 mesada" autocomplete="off">
+    <button data-act="addInc" style="background:linear-gradient(135deg,#8FE3B0,#5FD6C8);color:#102A22">Agregar</button>
+  </div>
+  <div class="msg">${esc(msg)}</div>
+  <div class="card">
+    ${list.length ? list.map(i => `<div class="row">
+      <div class="grow"><div class="t">${esc(i.desc)}</div><div class="muted">${esc(i.date)}</div></div>
+      <span class="amt" style="color:#8FE3B0">+${fmt(i.amount)}</span>
+      <button class="x" data-act="delInc" data-id="${i.id}" aria-label="Borrar">×</button>
+    </div>`).join("") : `<div class="muted" style="padding:12px 0">Aún no agregas ingresos este mes.</div>`}
+  </div>`;
+}
+
+function vInforme(){
+  const mes = monthExp();
+  const total = sum(mes);
+  const inn = sum(mes.filter(e => e.cat === "Innecesario"));
+  const pctInn = total ? Math.round(inn/total*100) : 0;
+  const bars = Object.keys(CATS).map(c => {
+    const t = sum(mes.filter(e => e.cat === c));
+    const p = total ? t/total*100 : 0;
+    return `<div style="display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;justify-content:space-between;font-size:14px"><span>${esc(c)}</span><span>${fmt(t)}</span></div>
+      <div class="bar"><i style="width:${p}%;background:${CATS[c].c}"></i></div>
+    </div>`;
+  }).join("");
+  const lista = mes.slice().reverse();
+  return `
+  <div>
+    <div class="muted">Cierre del mes</div>
+    <h1>Informe mensual</h1>
+  </div>
+  <div class="grad">
+    <div class="muted">Total gastado</div>
+    <div class="big" style="font-size:32px">${fmt(total)}</div>
+    <div style="font-size:13px;color:#8FE3B0">Innecesario: ${pctInn} % del total</div>
+  </div>
+  <div class="card" style="display:flex;flex-direction:column;gap:14px">
+    <h2>Por categoría</h2>
+    ${bars}
+  </div>
+  <div class="card">
+    <h2 style="margin-bottom:4px">Lista completa de gastos</h2>
+    ${lista.length ? lista.map(e => `<div class="row"><div class="grow"><div class="t">${esc(e.desc)}</div><div class="muted">${esc(e.cat)} · ${esc(e.date)}</div></div><span class="amt">${fmt(e.amount)}</span></div>`).join("") : `<div class="muted" style="padding:12px 0">Sin gastos este mes.</div>`}
+  </div>
+  ${vRespaldo()}`;
+}
+
+function vRespaldo(){
+  const data = JSON.stringify({expenses: st.expenses, incomes: st.incomes, learned: st.learned});
+  return `<div class="card" style="display:flex;flex-direction:column;gap:10px">
+    <h2>Respaldo</h2>
+    <div class="muted">Copia este texto y guárdalo. En la nueva dirección, pégalo abajo para recuperar tus datos.</div>
+    <textarea id="bk" readonly style="width:100%;min-height:80px;background:#120F18;color:#B9AFC4;border:1px solid #3A3248;border-radius:12px;padding:8px;font-size:11px">${esc(data)}</textarea>
+    <button class="x" data-act="copyBk" style="font-size:14px;color:#FFB784;align-self:flex-start;padding:6px 0">Copiar respaldo</button>
+    <textarea id="restIn" placeholder="Pega aquí el respaldo" style="width:100%;min-height:60px;background:#120F18;color:#F4EFE8;border:1px solid #3A3248;border-radius:12px;padding:8px;font-size:12px"></textarea>
+    <button class="x" data-act="restore" style="font-size:14px;color:#8FE3B0;align-self:flex-start;padding:6px 0">Restaurar datos</button>
+    <div class="msg">${esc(msg)}</div>
+  </div>`;
+}
+
+function render(){
+  document.getElementById("app").innerHTML =
+    view === "inicio" ? vInicio() : view === "ingresos" ? vIngresos() : vInforme();
+  document.getElementById("nav").innerHTML = nav();
+  const input = document.getElementById("expIn") || document.getElementById("incIn");
+  if (input) input.focus();
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-act]");
+  if (!t) return;
+  const a = t.dataset.act;
+  if (a === "nav"){ view = t.dataset.view; msg = ""; render(); }
+  else if (a === "addExp"){ addExpense(document.getElementById("expIn").value); }
+  else if (a === "addInc"){ addIncome(document.getElementById("incIn").value); }
+  else if (a === "delExp"){ st.expenses = st.expenses.filter(x => x.id !== t.dataset.id); save(); render(); }
+  else if (a === "copyBk"){
+    const t = document.getElementById("bk");
+    t.focus(); t.select(); t.setSelectionRange(0, 999999);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch(e){}
+    msg = ok ? "Respaldo copiado" : "Selecciona el texto y cópialo a mano";
+    render();
+  }
+  else if (a === "restore"){
+    const v = document.getElementById("restIn").value.trim();
+    try {
+      const d = JSON.parse(v);
+      if (!Array.isArray(d.expenses) || !Array.isArray(d.incomes)) throw new Error("bad");
+      st = {expenses: d.expenses, incomes: d.incomes, learned: d.learned || {}};
+      save(); msg = "Datos restaurados";
+    } catch(e){ msg = "Ese texto no es un respaldo válido"; }
+    render();
+  }
+  else if (a === "delInc"){ st.incomes = st.incomes.filter(x => x.id !== t.dataset.id); save(); render(); }
+});
+
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset && t.dataset.act === "cat"){
+    const exp = st.expenses.find(x => x.id === t.dataset.id);
+    if (exp){ exp.cat = t.value; learn(exp.desc, t.value); save(); msg = "Aprendí: " + exp.desc + " → " + t.value; }
+    render();
+  }
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  if (e.target.id === "expIn") addExpense(e.target.value);
+  if (e.target.id === "incIn") addIncome(e.target.value);
+});
+
+render();
+</script>
+</body>
+</html>
