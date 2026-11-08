@@ -381,7 +381,7 @@ function vIngresos(){
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const ymLabel = ym => { const [y,m] = ym.split("-").map(Number); return MESES[m-1] + " " + y; };
 const shiftYM = (ym, d) => { let [y,m] = ym.split("-").map(Number); m += d; while (m < 1){ m += 12; y--; } while (m > 12){ m -= 12; y++; } return y + "-" + String(m).padStart(2,"0"); };
-let rep = {mode:"mes", m:thisMonth(), from:thisMonth(), to:thisMonth(), y:thisMonth().slice(0,4)};
+let rep = {open:{}, mode:"mes", m:thisMonth(), from:thisMonth(), to:thisMonth(), y:thisMonth().slice(0,4)};
 function knownMonths(){
   const s = new Set([thisMonth(), thisMonth().slice(0,4) + "-01"]);
   for (const e of st.expenses) s.add(e.date.slice(0,7));
@@ -448,6 +448,12 @@ function vInforme(){
     </div>`;
   }).join("") : "";
 
+  const catRow = (c, label) => {
+    const open = !!rep.open[c];
+    const items = mes.filter(e => (e.cat || "") === c).sort((x,y) => x.date < y.date ? 1 : x.date > y.date ? -1 : 0);
+    return `<div class="item" data-act="repCat" data-c="${esc(c)}" role="button" tabindex="0" aria-expanded="${open}" style="cursor:pointer"><span class="dot" style="background:${colorOf(c)}"></span><span class="grow">${esc(label)}</span><span class="amt">${fmt(tot[c]||0)}</span><span class="mu" style="width:14px;text-align:right">${open ? "▾" : "▸"}</span></div>`
+      + (open ? `<div style="padding:0 0 8px 22px">${items.length ? items.map(e => `<div style="display:flex;justify-content:space-between;gap:12px;font-size:14px;padding:5px 0"><span>${esc(e.desc)} <span class="mu" style="font-size:12px">· ${esc(shortDate(e.date))}</span></span><span>${fmt(e.amount)}</span></div>`).join("") : `<div class="mu" style="font-size:13px;padding:4px 0">Sin gastos en este periodo.</div>`}</div>` : "");
+  };
   const listNames = st.cats.map(c => c.name).concat(Object.keys(tot).filter(k => !st.cats.some(c => c.name === k) && tot[k] > 0));
   const lista = mes.slice().sort((x,y) => x.date < y.date ? 1 : x.date > y.date ? -1 : 0);
   return `<div class="fade" style="display:flex;flex-direction:column;gap:16px">
@@ -465,8 +471,8 @@ function vInforme(){
   ${budgetRows ? `<div class="card"><div style="font-size:15px;font-weight:600">Presupuesto vs. gastado</div>${nMonths > 1 ? `<div class="mu" style="font-size:12px">Presupuesto mensual × ${nMonths} meses</div>` : ""}${budgetRows}</div>` : ""}
   <div class="card">
     <div style="font-size:15px;font-weight:600;margin-bottom:4px">Por categoría</div>
-    ${listNames.length ? listNames.map(c => `<div class="item"><span class="dot" style="background:${colorOf(c)}"></span><span class="grow">${esc(c)}</span><span class="amt">${fmt(tot[c]||0)}</span></div>`).join("") : `<div class="mu" style="padding:10px 0">Aún no tienes categorías.</div>`}
-    ${tot[""] ? `<div class="item"><span class="dot" style="background:#8E8E93"></span><span class="grow">Sin categoría</span><span class="amt">${fmt(tot[""])}</span></div>` : ""}
+    ${listNames.length ? listNames.map(c => catRow(c, c)).join("") : `<div class="mu" style="padding:10px 0">Aún no tienes categorías.</div>`}
+    ${tot[""] ? catRow("", "Sin categoría") : ""}
   </div>
   <div class="card">
     <div style="font-size:15px;font-weight:600;margin-bottom:4px">Lista completa de gastos</div>
@@ -666,6 +672,7 @@ document.addEventListener("click", e => {
   else if (a === "delExp"){ st.expenses = st.expenses.filter(x => x.id !== t.dataset.id); save(); render(); }
   else if (a === "delInc"){ st.incomes = st.incomes.filter(x => x.id !== t.dataset.id); save(); render(); }
   else if (a === "delSav"){ const l = st.sav[t.dataset.k]; if (l){ st.sav[t.dataset.k] = l.filter(x => x.id !== t.dataset.id); save(); render(); } }
+  else if (a === "repCat"){ rep.open[t.dataset.c] = !rep.open[t.dataset.c]; render(); }
   else if (a === "repMode"){ rep.mode = t.dataset.mode; render(); }
   else if (a === "repPrev"){ if (rep.m > knownMonths()[0]) rep.m = shiftYM(rep.m, -1); render(); }
   else if (a === "repNext"){ if (rep.m < thisMonth()) rep.m = shiftYM(rep.m, 1); render(); }
