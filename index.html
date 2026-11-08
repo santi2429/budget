@@ -155,6 +155,34 @@ function applyTheme(){
   r.colorScheme = dark ? "dark" : "light";
   const tc = document.querySelector('meta[name="theme-color"]'); if (tc) tc.content = m.bg;
   const sb = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]'); if (sb) sb.content = dark ? "black-translucent" : "default";
+  setIcons();
+}
+
+const ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180"><defs><radialGradient id="bg" cx="50%" cy="55%" r="75%"><stop offset="0" stop-color="#2A2210"/><stop offset="1" stop-color="#080705"/></radialGradient><linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFE7A0"/><stop offset=".5" stop-color="#E9BC55"/><stop offset="1" stop-color="#A9781F"/></linearGradient><linearGradient id="leather" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2A2A2E"/><stop offset="1" stop-color="#0E0E10"/></linearGradient><filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/></feMerge></filter><filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".5"/></filter></defs><rect width="180" height="180" fill="url(#bg)"/><rect x="46" y="34" width="88" height="52" rx="6" fill="url(#gold)" stroke="#F5D68A" stroke-opacity=".75" stroke-width="1.5"/><rect x="52" y="40" width="16" height="11" rx="2.5" fill="#7E5714"/><rect x="30" y="60" width="120" height="86" rx="16" fill="#F5C452" opacity=".35" filter="url(#glow)"/><rect x="30" y="60" width="120" height="86" rx="16" fill="url(#leather)" stroke="#E0B44A" stroke-width="2" filter="url(#sh)"/><rect x="36" y="66" width="108" height="74" rx="11" fill="none" stroke="#E0B44A" stroke-opacity=".6" stroke-width="1.6" stroke-dasharray="4 3"/><path d="M30 86 Q90 98 150 86" fill="none" stroke="#E0B44A" stroke-opacity=".7" stroke-width="2"/></svg>`;
+let iconTimer;
+function setIcons(){
+  clearTimeout(iconTimer);
+  iconTimer = setTimeout(async () => {
+    try {
+      const k = st.theme.accent, a = ACCENTS[k];
+      const mix = (h, f) => "#" + [1,3,5].map(i => Math.round(parseInt(h.slice(i,i+2),16) * f).toString(16).padStart(2,"0")).join("");
+      const svg = k === "dorado" ? ICON_SVG : ICON_SVG.replace(/#FFE7A0|#F5D68A/g, a.l).replace(/#E9BC55|#E0B44A|#F5C452/g, a.g).replace(/#A9781F|#7E5714/g, a.d).replace("#2A2210", mix(a.g, .16));
+      const img = new Image();
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+      await img.decode();
+      const png = s => { const c = document.createElement("canvas"); c.width = c.height = s; c.getContext("2d").drawImage(img, 0, 0, s, s); return c.toDataURL("image/png"); };
+      const at = document.querySelector('link[rel="apple-touch-icon"]');
+      if (at) at.href = png(180);
+      const mk = document.querySelector('link[rel="manifest"]');
+      if (mk && k !== "dorado"){
+        const base = location.origin + location.pathname, bg = MODES[st.theme.mode].bg;
+        const m = {name:"Budget", short_name:"Budget", start_url:base, scope:base, display:"standalone", background_color:bg, theme_color:bg, lang:"es", icons:[{src:png(192), sizes:"192x192", type:"image/png"}, {src:png(512), sizes:"512x512", type:"image/png"}]};
+        const u = URL.createObjectURL(new Blob([JSON.stringify(m)], {type:"application/manifest+json"}));
+        if (mk.dataset.u) URL.revokeObjectURL(mk.dataset.u);
+        mk.dataset.u = u; mk.href = u;
+      }
+    } catch(e){}
+  }, 250);
 }
 applyTheme();
 
