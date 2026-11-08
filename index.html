@@ -104,16 +104,22 @@ const MODES = {
   claro:{bg:"#F6F5F2",card:"#FFFFFF",bd:"#E4E2DC",bd2:"#CFCCC4",tx:"#1B1B1D",mu:"#6B6B72",nav:"rgba(255,255,255,.96)",red:"#C23B52",warn:"#A32D3F",glow:.12}
 };
 
-const KEY = "gastos_v1";
-let st = load();
+const KEY = "gastos_v1";            // datos viejos de este celular (solo sirven para restaurar)
+const THEME_KEY = "budget_theme_v1"; // color y fondo: personales de cada celular
+let phase = "loading", authMode = "in";
+const cloud = {email:"", code:"", n:1};
+let st = blank();
 let view = "inicio";
 let msg = "";
 let gTouched = false;
 let toastT;
 
-function load(){
-  let d = null;
-  try { d = JSON.parse(localStorage.getItem(KEY)); } catch(e){}
+function blank(){
+  let th = {};
+  try { th = JSON.parse(localStorage.getItem(THEME_KEY)) || {}; } catch(e){}
+  return fixup({expenses:[], incomes:[], learned:{}, cats:[], theme:th});
+}
+function fixup(d){
   if (!d || !Array.isArray(d.expenses)) d = {expenses:[], incomes:[], learned:{}};
   if (!Array.isArray(d.incomes)) d.incomes = [];
   if (!d.learned || typeof d.learned !== "object") d.learned = {};
@@ -134,8 +140,8 @@ function load(){
   return d;
 }
 function save(){
-  try { localStorage.setItem(KEY, JSON.stringify(st)); }
-  catch(e){ msg = "No pude guardar en este celular."; }
+  try { localStorage.setItem(THEME_KEY, JSON.stringify(st.theme)); } catch(e){}
+  if (window.FBpush) window.FBpush();
 }
 function applyTheme(){
   const a = ACCENTS[st.theme.accent], m = MODES[st.theme.mode], dark = st.theme.mode === "oscuro";
@@ -283,7 +289,7 @@ function rowExp(e, withDate){
 function vWelcome(){
   return `<div class="welcome fade">
     <div><div class="sub">Bienvenido a</div><h1 style="font-size:40px;color:var(--gl)">Budget</h1></div>
-    <div class="mu" style="font-size:15px">Anota tus gastos e ingresos y mira en qué se va tu plata. Tus datos se guardan solo en este celular.</div>
+    <div class="mu" style="font-size:15px">Anota tus gastos e ingresos y mira en qué se va tu plata. Tus datos se guardan en tu cuenta compartida.</div>
     <label for="nameIn" class="mu">¿Cómo te llamas?</label>
     <input id="nameIn" class="inp" type="text" placeholder="Tu nombre" autocomplete="given-name" maxlength="30">
     <button class="btn" data-act="setName">Empezar</button>
@@ -541,6 +547,14 @@ function vConfig(){
   </div>
 
   <div class="card" style="display:flex;flex-direction:column;gap:10px">
+    <div style="font-size:15px;font-weight:600">Cuenta compartida</div>
+    <div class="mu">Entraste como ${esc(cloud.email)}.${cloud.n > 1 ? " " + cloud.n + " personas comparten estos datos." : ""} Quien tenga este código y su propia cuenta entra a lo mismo:</div>
+    <div class="big" style="font-size:30px;letter-spacing:4px;word-break:break-all">${esc(cloud.code)}</div>
+    <div class="form"><button class="btn2" data-act="copyCode">Copiar código</button><button class="btn2" data-act="shareCode">Compartir</button></div>
+    <button class="btn2" data-act="logout" style="align-self:flex-start">Cerrar sesión</button>
+  </div>
+
+  <div class="card" style="display:flex;flex-direction:column;gap:10px">
     <div style="font-size:15px;font-weight:600">Categorías de gastos</div>
     <div class="mu">Crea solo las que necesites. Al anotar un gasto eliges la categoría y la app aprende.</div>
     <div>${catRows || `<div class="mu" style="padding:6px 0">Aún no tienes categorías.</div>`}</div>
@@ -557,7 +571,7 @@ function vConfig(){
 
   <div class="card" style="display:flex;flex-direction:column;gap:10px">
     <div style="font-size:15px;font-weight:600">Respaldo</div>
-    <div class="mu">Copia este texto y guárdalo (en Notas o WhatsApp). Si la app aparece vacía, pégalo abajo para recuperar tus datos.</div>
+    <div class="mu">Copia este texto y guárdalo (en Notas o WhatsApp). Para traer datos de un respaldo viejo, pégalo abajo: se suman a lo que ya hay.</div>
     <textarea id="bk" readonly aria-label="Texto de respaldo">${esc(data)}</textarea>
     <button class="btn2" data-act="copyBk" style="align-self:flex-start">Copiar respaldo</button>
     <textarea id="restIn" placeholder="Pega aquí el respaldo" aria-label="Pegar respaldo" style="color:var(--tx)"></textarea>
@@ -566,7 +580,41 @@ function vConfig(){
   </div>`;
 }
 
+function vPhase(){
+  const logo = `<div><div class="sub">Bienvenido a</div><h1 style="font-size:40px;color:var(--gl)">Budget</h1></div>`;
+  if (phase === "loading") return `<div class="welcome fade">${logo}<div class="mu" style="font-size:15px">Cargando…</div><div class="msg">${esc(msg)}</div></div>`;
+  if (phase === "auth"){
+    const up = authMode === "up";
+    return `<div class="welcome fade">${logo}
+    <div class="mu" style="font-size:15px">${up ? "Crea tu cuenta con tu correo. Después crearás un hogar o te unirás al de otra persona con un código." : "Entra con tu correo y contraseña."}</div>
+    <input id="authEmail" class="inp" type="email" placeholder="Correo" autocomplete="${up?"email":"username"}" autocapitalize="none" autocorrect="off" aria-label="Correo">
+    <input id="authPass" class="inp" type="password" placeholder="Contraseña (mínimo 6)" autocomplete="${up?"new-password":"current-password"}" aria-label="Contraseña">
+    <button class="btn" data-act="authSubmit">${up?"Crear cuenta":"Entrar"}</button>
+    <button class="btn2" data-act="authToggle">${up?"Ya tengo cuenta":"Crear una cuenta nueva"}</button>
+    ${up?"":`<button class="btn2" data-act="authReset" style="border:none">Olvidé mi contraseña</button>`}
+    <div class="msg">${esc(msg)}</div></div>`;
+  }
+  return `<div class="welcome fade">${logo}
+    <div class="mu" style="font-size:15px">Ya entraste como ${esc(cloud.email)}. Ahora elige:</div>
+    <div class="card" style="display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:15px;font-weight:600">Empezar un hogar nuevo</div>
+      <div class="mu">Empieza desde cero. Luego compartes el código con quien quieras.</div>
+      <button class="btn" data-act="homeCreate">Crear mi hogar</button>
+    </div>
+    <div class="card" style="display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:15px;font-weight:600">Unirme al de otra persona</div>
+      <input id="joinCode" class="inp" type="text" placeholder="Código de invitación" autocomplete="off" autocapitalize="characters" maxlength="12" aria-label="Código de invitación">
+      <button class="btn2" data-act="homeJoin">Unirme</button>
+    </div>
+    <button class="btn2" data-act="logout" style="border:none">Cerrar sesión</button>
+    <div class="msg">${esc(msg)}</div></div>`;
+}
 function render(){
+  if (phase !== "app"){
+    document.getElementById("app").innerHTML = vPhase();
+    document.getElementById("nav").style.display = "none";
+    return;
+  }
   const views = {inicio:vInicio, gastos:vGastos, ingresos:vIngresos, informe:vInforme, repartir:vRepartir, ahorros:vAhorros, config:vConfig};
   const gear = st.name && view !== "config" ? `<button class="gear" data-act="nav" data-view="config" aria-label="Configuración"><svg viewBox="0 0 24 24" aria-hidden="true">${GEAR}</svg></button>` : "";
   document.getElementById("app").innerHTML = st.name ? gear + (views[view] || vInicio)() : vWelcome();
@@ -634,11 +682,16 @@ document.addEventListener("click", e => {
     try {
       const d = JSON.parse(v);
       if (!Array.isArray(d.expenses) || !Array.isArray(d.incomes)) throw new Error("bad");
-      const keepName = st.name;
-      localStorage.setItem(KEY, JSON.stringify(d));
-      st = load();
-      if (!st.name) st.name = keepName;
-      save(); applyTheme(); render(); toast("Datos restaurados");
+      const d2 = fixup(d);
+      const ei = new Set(st.expenses.map(x => x.id)), ii = new Set(st.incomes.map(x => x.id));
+      d2.expenses.forEach(x => { if (!x.id) x.id = uid(); if (!ei.has(x.id)) st.expenses.push(x); });
+      d2.incomes.forEach(x => { if (!x.id) x.id = uid(); if (!ii.has(x.id)) st.incomes.push(x); });
+      d2.cats.forEach(c => { if (!st.cats.some(x => norm(x.name) === norm(c.name))) st.cats.push(c); });
+      st.learned = Object.assign({}, d2.learned, st.learned);
+      ["inv","aho"].forEach(k => d2.sav[k].forEach(x => { if (!x.id) x.id = uid(); if (!st.sav[k].some(y => y.id === x.id)) st.sav[k].push(x); }));
+      Object.keys(d2.budget.amounts).forEach(k => { if (st.budget.amounts[k] == null) st.budget.amounts[k] = d2.budget.amounts[k]; });
+      if (!st.name) st.name = d2.name;
+      save(); render(); toast("Datos agregados");
     } catch(err){ toast("Ese texto no es un respaldo válido"); }
   }
 });
@@ -713,6 +766,190 @@ document.addEventListener("keydown", e => {
 });
 
 render();
+setTimeout(() => { if (phase === "loading") setMsg("Sin conexión o bloqueado. Revisa tu internet y vuelve a abrir la app."); }, 12000);
+</script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, updateDoc, getDoc, onSnapshot, arrayUnion, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const app = initializeApp({
+  apiKey: "AIzaSyBy16StQvcImtBh_ctK4SkpPbnxgm-WAhM",
+  authDomain: "budget-santi.firebaseapp.com",
+  projectId: "budget-santi",
+  appId: "1:176276918099:web:a4564b2b91338b42a2dba6"
+});
+const auth = getAuth(app);
+const db = initializeFirestore(app, {localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})});
+
+let me = null, homeId = null, ready = false, unsubUser = null, unsubs = [];
+let lastHome = "", lastExp = {}, lastInc = {}, lastName = null, timer = null, pending = false;
+const cj = o => JSON.stringify(o, Object.keys(o).sort());
+const homeJson = () => JSON.stringify({cats: st.cats, budget: st.budget, sav: st.sav, learned: st.learned});
+const isTyping = () => { const a = document.activeElement; return a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); };
+function softRender(){ if (isTyping()){ pending = true; return; } render(); }
+document.addEventListener("focusout", () => {
+  if (!pending) return;
+  setTimeout(() => { if (pending && !isTyping()){ pending = false; render(); } }, 250);
+});
+function goPhase(p){ phase = p; msg = ""; render(); }
+
+function stopHome(){
+  unsubs.forEach(f => { try { f(); } catch(e){} }); unsubs = [];
+  homeId = null; ready = false; lastHome = ""; lastExp = {}; lastInc = {};
+  clearTimeout(timer);
+}
+function resetData(){ const fresh = blank(); fresh.theme = st.theme; Object.assign(st, fresh); cloud.code = ""; cloud.n = 1; }
+
+function startHome(h){
+  stopHome();
+  homeId = h; cloud.code = h;
+  const got = new Set();
+  const mark = k => {
+    got.add(k);
+    if (got.size === 3 && !ready){ ready = true; goPhase("app"); }
+    else if (ready) softRender();
+  };
+  const bad = () => { stopHome(); goPhase("home"); setMsg("No pude abrir ese hogar. Prueba con otro código."); };
+  unsubs.push(onSnapshot(doc(db, "homes", h), s => {
+    if (!s.exists()) return bad();
+    const d = s.data();
+    const t = fixup({expenses: [], incomes: [], name: st.name, theme: st.theme, cats: d.cats || [], budget: d.budget, sav: d.sav, learned: d.learned});
+    st.cats = t.cats; st.budget = t.budget; st.sav = t.sav; st.learned = t.learned;
+    cloud.n = Array.isArray(d.members) ? d.members.length : 1;
+    lastHome = homeJson();
+    mark("h");
+  }, bad));
+  unsubs.push(onSnapshot(collection(db, "homes", h, "expenses"), s => {
+    st.expenses = s.docs.map(x => ({...x.data(), id: x.id}));
+    lastExp = {}; st.expenses.forEach(e => lastExp[e.id] = cj(e));
+    mark("e");
+  }, bad));
+  unsubs.push(onSnapshot(collection(db, "homes", h, "incomes"), s => {
+    st.incomes = s.docs.map(x => ({...x.data(), id: x.id}));
+    lastInc = {}; st.incomes.forEach(e => lastInc[e.id] = cj(e));
+    mark("i");
+  }, bad));
+}
+
+async function syncList(name, arr, last, h){
+  const ops = [], seen = new Set();
+  for (const e of arr){ seen.add(e.id); const j = cj(e); if (last[e.id] !== j){ last[e.id] = j; ops.push([1, e]); } }
+  for (const id of Object.keys(last)) if (!seen.has(id)){ delete last[id]; ops.push([0, id]); }
+  for (let i = 0; i < ops.length; i += 400){
+    const b = writeBatch(db);
+    ops.slice(i, i + 400).forEach(([k, v]) => k ? b.set(doc(db, "homes", h, name, v.id), v) : b.delete(doc(db, "homes", h, name, v)));
+    await b.commit();
+  }
+}
+async function flush(){
+  if (!me || !homeId || !ready) return;
+  const h = homeId;
+  try {
+    const hj = homeJson();
+    if (hj !== lastHome){ lastHome = hj; await updateDoc(doc(db, "homes", h), JSON.parse(hj)); }
+    await syncList("expenses", st.expenses, lastExp, h);
+    await syncList("incomes", st.incomes, lastInc, h);
+    if (st.name !== lastName){ lastName = st.name; await setDoc(doc(db, "users", me.uid), {name: st.name}, {merge: true}); }
+  } catch(e){ toast("No pude sincronizar. Se reintentará."); }
+}
+window.FBpush = () => { if (!ready) return; clearTimeout(timer); timer = setTimeout(flush, 250); };
+
+onAuthStateChanged(auth, u => {
+  if (unsubUser){ unsubUser(); unsubUser = null; }
+  stopHome();
+  me = u;
+  if (!u){ resetData(); cloud.email = ""; return goPhase("auth"); }
+  cloud.email = u.email || "";
+  phase = "loading"; render();
+  unsubUser = onSnapshot(doc(db, "users", u.uid), s => {
+    const d = s.exists() ? s.data() : {};
+    st.name = d.name || ""; lastName = st.name;
+    if (!d.homeId){ stopHome(); return goPhase("home"); }
+    if (d.homeId !== homeId) startHome(d.homeId);
+    else softRender();
+  }, () => { setMsg("No pude cargar tu cuenta. Revisa tu internet."); });
+});
+
+const AUTH_ERR = {
+  "auth/invalid-credential": "Correo o contraseña incorrectos",
+  "auth/wrong-password": "Correo o contraseña incorrectos",
+  "auth/user-not-found": "Correo o contraseña incorrectos",
+  "auth/email-already-in-use": "Ese correo ya tiene cuenta. Toca \"Ya tengo cuenta\"",
+  "auth/weak-password": "La contraseña debe tener mínimo 6 caracteres",
+  "auth/invalid-email": "Ese correo no es válido",
+  "auth/too-many-requests": "Demasiados intentos. Espera un momento",
+  "auth/network-request-failed": "Sin internet. Intenta de nuevo"
+};
+const authErr = e => AUTH_ERR[e && e.code] || "No pude entrar. Intenta de nuevo";
+
+async function doAuth(){
+  const em = document.getElementById("authEmail").value.trim(), pw = document.getElementById("authPass").value;
+  if (!em || !pw) return setMsg("Escribe tu correo y contraseña");
+  setMsg(authMode === "up" ? "Creando cuenta…" : "Entrando…");
+  try {
+    if (authMode === "up") await createUserWithEmailAndPassword(auth, em, pw);
+    else await signInWithEmailAndPassword(auth, em, pw);
+  } catch(e){ setMsg(authErr(e)); }
+}
+function newCode(){
+  const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", r = new Uint8Array(8);
+  crypto.getRandomValues(r);
+  return Array.from(r, x => A[x % A.length]).join("");
+}
+async function createHome(){
+  setMsg("Creando tu hogar…");
+  const code = newCode();
+  try {
+    await setDoc(doc(db, "homes", code), {members: [me.uid], cats: [], budget: {on:false, amounts:{}}, sav: {inv:[], aho:[]}, learned: {}});
+    await setDoc(doc(db, "users", me.uid), {homeId: code}, {merge: true});
+  } catch(e){ setMsg("No pude crear el hogar. Revisa tu internet."); }
+}
+async function joinHome(){
+  const code = document.getElementById("joinCode").value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (code.length < 6) return setMsg("Escribe el código completo");
+  setMsg("Buscando…");
+  try {
+    const ref = doc(db, "homes", code), s = await getDoc(ref);
+    if (!s.exists()) return setMsg("No existe un hogar con ese código");
+    if (!(s.data().members || []).includes(me.uid)) await updateDoc(ref, {members: arrayUnion(me.uid)});
+    await setDoc(doc(db, "users", me.uid), {homeId: code}, {merge: true});
+  } catch(e){ setMsg("No pude unirme. Revisa el código y tu internet."); }
+}
+function copyText(t){
+  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t).then(() => true, () => false);
+  const x = document.createElement("textarea"); x.value = t; document.body.appendChild(x); x.select();
+  let ok = false; try { ok = document.execCommand("copy"); } catch(e){}
+  x.remove(); return Promise.resolve(ok);
+}
+
+document.addEventListener("click", async e => {
+  const t = e.target.closest("[data-act]");
+  if (!t) return;
+  const a = t.dataset.act;
+  if (a === "authToggle"){ authMode = authMode === "in" ? "up" : "in"; msg = ""; render(); }
+  else if (a === "authSubmit") await doAuth();
+  else if (a === "authReset"){
+    const em = document.getElementById("authEmail").value.trim();
+    if (!em) return setMsg("Escribe tu correo arriba y vuelve a tocar");
+    try { await sendPasswordResetEmail(auth, em); setMsg("Te enviamos un correo para cambiar la contraseña"); }
+    catch(err){ setMsg(authErr(err)); }
+  }
+  else if (a === "homeCreate") await createHome();
+  else if (a === "homeJoin") await joinHome();
+  else if (a === "logout"){ if (confirm("¿Cerrar sesión en este celular?")) await signOut(auth); }
+  else if (a === "copyCode"){ toast(await copyText(cloud.code) ? "Código copiado" : "Mantén presionado el código para copiarlo"); }
+  else if (a === "shareCode"){
+    const text = "Únete a mi Budget: abre https://santi2429.github.io/budget/ , crea tu cuenta y usa este código: " + cloud.code;
+    if (navigator.share){ try { await navigator.share({text}); } catch(err){} }
+    else toast(await copyText(text) ? "Invitación copiada" : "No pude copiar");
+  }
+});
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  if (e.target.id === "authPass" || e.target.id === "authEmail") doAuth();
+  else if (e.target.id === "joinCode") joinHome();
+});
 </script>
 </body>
 </html>
